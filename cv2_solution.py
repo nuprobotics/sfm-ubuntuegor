@@ -16,9 +16,27 @@ def get_matches(image1, image2) -> typing.Tuple[
     kp2, descriptors2 = sift.detectAndCompute(img2_gray, None)
 
     bf = cv2.BFMatcher()
-    matches_1_to_2: typing.Sequence[typing.Sequence[cv2.DMatch]] = bf.knnMatch(descriptors1, descriptors2, k=2)
-
-    # YOUR CODE HERE
+    matches_1_to_2 = bf.knnMatch(descriptors1, descriptors2, k=2)
+    matches_2_to_1 = bf.knnMatch(descriptors2, descriptors1, k=2)
+    
+    good_matches_1_to_2 = []
+    for m, n in matches_1_to_2:
+        if m.distance < 0.75 * n.distance:
+            good_matches_1_to_2.append(m)
+    
+    good_matches_2_to_1 = []
+    for m, n in matches_2_to_1:
+        if m.distance < 0.75 * n.distance:
+            good_matches_2_to_1.append(m)
+    
+    final_matches = []
+    for m1 in good_matches_1_to_2:
+        for m2 in good_matches_2_to_1:
+            if m1.queryIdx == m2.trainIdx and m1.trainIdx == m2.queryIdx:
+                final_matches.append(m1)
+                break
+    
+    return kp1, kp2, final_matches
 
 
 def get_second_camera_position(kp1, kp2, matches, camera_matrix):
@@ -40,8 +58,16 @@ def triangulation(
         kp2: typing.Sequence[cv2.KeyPoint],
         matches: typing.Sequence[cv2.DMatch]
 ):
-    pass
-    # YOUR CODE HERE
+    points1 = np.array([kp1[m.queryIdx].pt for m in matches], dtype=np.float32)
+    points2 = np.array([kp2[m.trainIdx].pt for m in matches], dtype=np.float32)
+
+    P1 = camera_matrix @ np.hstack((camera1_rotation_matrix, camera1_translation_vector))
+    P2 = camera_matrix @ np.hstack((camera2_rotation_matrix, camera2_translation_vector))
+
+    points_4d_homogeneous = cv2.triangulatePoints(P1, P2, points1.T, points2.T)
+    points_3d = points_4d_homogeneous[:3] / points_4d_homogeneous[3]
+
+    return points_3d.T
 
 
 # Task 4
@@ -53,12 +79,12 @@ def resection(
         points_3d
 ):
     pass
-    # YOUR CODE HERE
 
 
 def convert_to_world_frame(translation_vector, rotation_matrix):
-    pass
-    # YOUR CODE HERE
+    camera_rotation_world = rotation_matrix.T
+    camera_position_world = -camera_rotation_world @ translation_vector
+    return camera_position_world, camera_rotation_world
 
 
 def visualisation(
